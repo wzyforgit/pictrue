@@ -1,0 +1,179 @@
+/*对比拉伸*/
+/*	BYTE ashMax, ashMin;
+unsigned int histogram[256]={0};
+getHistogram(histogram, ash);
+getAshMaxMin(&ashMax, &ashMin, histogram);
+ash=drawContrast(ashMax, ashMin, ash);
+savePicture_ash("test1.bmp", ash);*/
+
+#include"Picture.h"
+#include<time.h>
+#include<string.h>
+#include<math.h>
+
+int main(void)
+{
+	/*初始化存储像素数据的内存*/
+	RGB_QUAD *color = NULL;
+	/*获取像素数据*/
+	color = getDataMap("s2.bmp", color);
+	/*灰度化*/
+	BYTE *ash = NULL;
+	ash = getAsh(color);
+	free(color);
+	binaryzation(100, ash);
+	savePicture_ash("test1.bmp", ash);
+	clock_t start, end;
+	start = clock();
+	/********************************************************************************************/
+	const int deviation[] = {
+		13, 13, 13, 14, 14, 15, 16, 17,
+		18, 19, 20, 21, 22, 23, 24, 25,
+		26, 27, 27, 29, 31, 31, 32, 33,
+		34, 35, 36, 37, 38, 40, 40, 42,
+		43, 43, 45, 45, 47, 49, 49, 51,
+		51, 53, 53, 55, 56, 56, 58, 58,
+		60, 61, 61, 63, 63, 65, 65, 66,
+		68, 68, 70
+	};
+	int x, y;
+	char left[60], right[60];
+	char mid[60];
+	char obsleft[60];
+	char obsright[60];
+	char leftObs;
+	char rightObs;
+
+	memset(mid, -1, 60);
+	memset(obsleft, -1, 60);
+	memset(obsright, -1, 60);
+
+	/*找中线*/
+	for (y = 14; y < 54; y++)
+	{
+		for (x = 40; x <= 79; x++)//right
+		{
+			if (ash[y * 80 + x] == 0x00 &&
+				ash[y * 80 + x + 1] == 0x00 &&
+				ash[y * 80 + x - 1] == 0xff &&
+				ash[y * 80 + x - 2] == 0xff)
+			{
+				right[y] = x;
+				break;
+			}
+			if (ash[y * 80 + x] == 0xff &&
+				ash[y * 80 + x + 1] == 0xff &&
+				ash[y * 80 + x - 1] == 0x00 &&
+				ash[y * 80 + x - 2] == 0x00)
+			{
+				obsright[y] = x;
+			}
+		}
+		for (x = 40; x >= 0; x--)//left
+		{
+			if (ash[y * 80 + x] == 0xff &&
+				ash[y * 80 + x + 1] == 0xff &&
+				ash[y * 80 + x - 1] == 0x00 &&
+				ash[y * 80 + x - 2] == 0x00)
+			{
+				left[y] = x;
+				break;
+			}
+			if (ash[y * 80 + x] == 0x00 &&
+				ash[y * 80 + x + 1] == 0x00 &&
+				ash[y * 80 + x - 1] == 0xff &&
+				ash[y * 80 + x - 2] == 0xff)
+			{
+				obsleft[y] = x;
+			}
+		}
+	}
+	/*统计障碍物长度*/
+	char obsCount;
+	int obsMidCnt;
+#define OBSCNTMAX 7
+	obsMidCnt = 0;
+	obsCount = 0;
+	leftObs = 0;
+	rightObs = 0;
+	for (y = 15; y < 54; y++)
+	{
+		if (obsleft[y] != -1 && obsright[y] != -1)//障碍物与视野中线有交点
+		{
+			obsCount++;
+			if (obsleft[y] - left[y] > right[y] - obsright[y])
+			{
+				obsMidCnt += (obsleft[y] + left[y]) / 2;
+				rightObs = 1;
+				leftObs = 0;
+			}
+			else
+			{
+				obsMidCnt += (right[y] + obsright[y]) / 2;
+				leftObs = 1;
+				rightObs = 0;
+			}
+			if (obsCount >= OBSCNTMAX)
+				break;
+		}
+		else if (right[y] - left[y] < deviation[59 - y] * 0.61 + 2)//障碍物与视野中线无交点
+		{
+			obsCount++;
+			obsMidCnt += (right[y] + left[y]) / 2;
+			if (abs(left[y] - left[y - 1]) >= 7)
+			{
+				leftObs = 1;
+				rightObs = 0;
+			}
+			else if (abs(right[y] - right[y - 1]) >= 7)
+			{
+				rightObs = 1;
+				leftObs = 0;
+			}
+			if (obsCount >= OBSCNTMAX)
+				break;
+		}
+		else//未发现障碍物
+		{
+			obsCount = 0;
+			obsMidCnt = 0;
+			leftObs = 0;
+			rightObs = 0;
+		}
+	}
+	/*补线*/
+	if (obsCount >= OBSCNTMAX)
+	{
+		obsMidCnt /= obsCount;
+		if (leftObs == 1)
+		{
+			obsMidCnt += 15;
+		}
+		else if (rightObs == 1)
+		{
+			obsMidCnt -= 15;
+		}
+		for (y = 14; y < 54; y++)
+		{
+			mid[y] = obsMidCnt;
+		}
+	}
+	else
+	{
+		for (y = 14; y < 54; y++)
+		{
+			mid[y] = (right[y] + left[y]) / 2;
+		}
+	}
+	for (y = 14; y <= 54; y++)//display
+	{
+		if (mid[y] != -1)
+			ash[y * 80 + mid[y]] = 100;
+	}
+	/********************************************************************************************/
+	end = clock();
+	savePicture_ash("test2.bmp", ash);
+	system("start s2.bmp");
+	printf("%ldms\n", end - start);
+	return 0;
+}
